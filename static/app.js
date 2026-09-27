@@ -73,6 +73,19 @@
   var qualityUnassignedEl = document.getElementById("qualityUnassigned");
   var qualityShortageEl = document.getElementById("qualityShortage");
 
+  var jointSectionEl = document.getElementById("jointSection");
+  var jointTargetEl = document.getElementById("jointTarget");
+  var jointRowsEl = document.getElementById("jointRows");
+  var jointGapEl = document.getElementById("jointGap");
+  var jointSelInfoEl = document.getElementById("jointSelInfo");
+  var jointBtn = document.getElementById("jointBtn");
+  var jointErrorEl = document.getElementById("jointError");
+  var jointFailEl = document.getElementById("jointFail");
+  var jointResultEl = document.getElementById("jointResult");
+  var jointSummaryEl = document.getElementById("jointSummary");
+  var jointRowListEl = document.getElementById("jointRowList");
+  var jointUnusedEl = document.getElementById("jointUnused");
+
   var PLACEHOLDER = {
     single: "填写左侧信息后点击「计算最优方案」，这里会列出逐板切件、锯缝、余料与合计价格。",
     schedule: "填写左侧零件与锯机信息后点击「计算最优排程」，这里会列出各机逐板开工/完工分钟与整体完工分钟。",
@@ -882,6 +895,34 @@
       });
       measure.appendChild(grid);
       card.appendChild(measure);
+
+      // 错缝拼板选件：逐切件勾选，参与 joint-preview 预览。
+      var select = document.createElement("div");
+      select.className = "joint-select-block";
+      select.setAttribute("data-board-no", String(board.board_no));
+
+      var selTitle = document.createElement("div");
+      selTitle.className = "measure-title";
+      selTitle.textContent = "错缝拼板选件（勾选参与拼板预览）";
+      select.appendChild(selTitle);
+
+      var selGrid = document.createElement("div");
+      selGrid.className = "joint-select-grid";
+      board.cuts.forEach(function (planned, cutIdx) {
+        var cell = document.createElement("label");
+        cell.className = "joint-select-cell";
+        var box = document.createElement("input");
+        box.type = "checkbox";
+        box.className = "joint-check";
+        box.setAttribute("data-cut-no", String(cutIdx + 1));
+        cell.appendChild(box);
+        cell.appendChild(
+          document.createTextNode("切件 " + (cutIdx + 1) + " · 长 " + planned)
+        );
+        selGrid.appendChild(cell);
+      });
+      select.appendChild(selGrid);
+      card.appendChild(select);
     }
     return card;
   }
@@ -929,6 +970,13 @@
     qualityResultEl.hidden = true;
     qualityErrorEl.hidden = true;
     qualityErrorEl.textContent = "";
+
+    // 错缝拼板预览同样仅对存在合格板的批次开放；重置上次结果与提示。
+    jointSectionEl.hidden = !hasQualified;
+    jointResultEl.hidden = true;
+    jointErrorEl.hidden = true;
+    jointFailEl.hidden = true;
+    updateJointSelInfo();
 
     placeholderEl.hidden = true;
     batchResultEl.hidden = false;
@@ -1222,6 +1270,207 @@
       .finally(function () {
         qualityBtn.disabled = false;
         qualityBtn.textContent = "执行实测复核";
+      });
+  });
+
+  /* ---------- 合格切件错缝拼板预览 ---------- */
+
+  function showJointError(msg) {
+    jointErrorEl.textContent = msg;
+    jointErrorEl.hidden = false;
+    jointFailEl.hidden = true;
+    jointResultEl.hidden = true;
+  }
+
+  // 收集勾选的合格切件（按板号、切件序号排列）。
+  function collectJointSelection() {
+    var selected = [];
+    var blocks = batchBoardListEl.querySelectorAll(".joint-select-block");
+    for (var b = 0; b < blocks.length; b++) {
+      var boardNo = Number(blocks[b].getAttribute("data-board-no"));
+      var boxes = blocks[b].querySelectorAll(".joint-check");
+      for (var i = 0; i < boxes.length; i++) {
+        if (boxes[i].checked) {
+          selected.push({
+            board_no: board_no,
+            cut_no: Number(boxes[i].getAttribute("data-cut-no")),
+          });
+        }
+      }
+    }
+    return selected;
+  }
+
+  function updateJointSelInfo() {
+    var count = collectJointSelection().length;
+    jointSelInfoEl.textContent =
+      count === 0 ? "未勾选切件" : "已勾选 " + count + " 件（限 1～10 件）";
+  }
+
+  // 勾选变化时实时更新已选件数（事件委托，适应批次卡片重绘）。
+  batchBoardListEl.addEventListener("change", function (e) {
+    if (e.target.classList.contains("joint-check")) {
+      updateJointSelInfo();
+    }
+  });
+
+  function renderJointPreview(data) {
+    jointSummaryEl.innerHTML = "";
+    jointSummaryEl.appendChild(stat("选件", data.selected_count + " 件"));
+    jointSummaryEl.appendChild(stat("目标行长", data.target_length));
+    jointSummaryEl.appendChild(stat("行数", data.row_count + " 行"));
+    jointSummaryEl.appendChild(stat("最小错缝", data.min_stagger));
+    jointSummaryEl.appendChild(stat("用件", data.used_count + " 件", true));
+    jointSummaryEl.appendChild(stat("未用", data.unused_count + " 件"));
+
+    // 逐行：切件顺序、比例条与接缝坐标。
+    jointRowListEl.innerHTML = "";
+    data.rows.forEach(function (row) {
+      var card = document.createElement("div");
+      card.className = "machine-card";
+
+      var head = document.createElement("div");
+      head.className = "machine-head";
+      var no = document.createElement("span");
+      no.className = "no";
+      no.textContent = "第 " + row.row_no + " 行";
+      var meta = document.createElement("span");
+      meta.className = "meta";
+      meta.textContent = row.joints.length
+        ? row.pieces.length + " 件 · 接缝坐标 " + row.joints.join("、")
+        : row.pieces.length + " 件 · 无接缝（不限制邻行）";
+      head.appendChild(no);
+      head.appendChild(meta);
+      card.appendChild(head);
+
+      // 等宽木条比例条：段长即件长，段间白缝即接缝。
+      var bar = document.createElement("div");
+      bar.className = "bar joint-bar";
+      row.pieces.forEach(function (piece) {
+        var seg = document.createElement("div");
+        seg.className = "joint-seg";
+        seg.style.flexGrow = String(piece.length);
+        seg.title =
+          "板 " + piece.board_no + " 切件 " + piece.cut_no +
+          " · 长 " + piece.length;
+        bar.appendChild(seg);
+      });
+      card.appendChild(bar);
+
+      // 切件顺序。
+      var seq = document.createElement("div");
+      seq.className = "cut-list";
+      row.pieces.forEach(function (piece, idx) {
+        if (idx > 0) {
+          seq.appendChild(document.createTextNode(" → "));
+        }
+        var chip = document.createElement("span");
+        chip.className = "chip";
+        chip.textContent =
+          "板 " + piece.board_no + " 切件 " + piece.cut_no +
+          "（长 " + piece.length + "）";
+        seq.appendChild(chip);
+      });
+      card.appendChild(seq);
+
+      var foot = document.createElement("div");
+      foot.className = "machine-foot";
+      foot.textContent = "行长 " + row.total_length + "（接头无长度损耗）";
+      card.appendChild(foot);
+
+      jointRowListEl.appendChild(card);
+    });
+
+    // 未用切件。
+    jointUnusedEl.innerHTML = "";
+    if (!data.unused.length) {
+      var none = document.createElement("span");
+      none.className = "qualified-empty";
+      none.textContent = "全部选件均已使用";
+      jointUnusedEl.appendChild(none);
+    } else {
+      data.unused.forEach(function (item) {
+        var chip = document.createElement("span");
+        chip.className = "chip shortage-chip";
+        chip.textContent =
+          "板 " + item.board_no + " 切件 " + item.cut_no +
+          " · 长 " + item.length;
+        jointUnusedEl.appendChild(chip);
+      });
+    }
+
+    jointErrorEl.hidden = true;
+    jointFailEl.hidden = true;
+    jointResultEl.hidden = false;
+  }
+
+  jointBtn.addEventListener("click", function () {
+    if (currentBatchId == null) return;
+    jointErrorEl.hidden = true;
+    jointFailEl.hidden = true;
+    jointResultEl.hidden = true;
+
+    var targetRes = readPositiveInt(jointTargetEl, "目标行长");
+    if (targetRes.error) {
+      showJointError(targetRes.error);
+      return;
+    }
+    var rowsRaw = jointRowsEl.value.trim();
+    if (!/^\d+$/.test(rowsRaw)) {
+      jointRowsEl.classList.add("invalid");
+      showJointError("行数必须为 2～4 的整数");
+      return;
+    }
+    var rowCount = Number(rowsRaw);
+    if (rowCount < 2 || rowCount > 4) {
+      jointRowsEl.classList.add("invalid");
+      showJointError("行数必须为 2～4 的整数");
+      return;
+    }
+    jointRowsEl.classList.remove("invalid");
+    var gapRes = readNonnegInt(jointGapEl, "最小错缝距离");
+    if (gapRes.error) {
+      showJointError(gapRes.error);
+      return;
+    }
+
+    var selected = collectJointSelection();
+    if (selected.length < 1 || selected.length > 10) {
+      showJointError(
+        "请勾选 1～10 件合格切件（当前已选 " + selected.length + " 件）"
+      );
+      return;
+    }
+
+    jointBtn.disabled = true;
+    jointBtn.textContent = "求解中…";
+
+    postJson("/api/batches/" + currentBatchId + "/joint-preview", {
+      pieces: selected,
+      target_length: targetRes.value,
+      row_count: rowCount,
+      min_stagger: gapRes.value,
+    })
+      .then(function (r) {
+        if (!r.ok) {
+          showJointError(r.body.error || "服务器未能处理该请求");
+          return;
+        }
+        if (r.body.feasible === false) {
+          jointFailEl.textContent = "无解：" + r.body.reason;
+          jointFailEl.hidden = false;
+          jointResultEl.hidden = true;
+          jointErrorEl.hidden = true;
+          return;
+        }
+        renderJointPreview(r.body);
+      })
+      .catch(function () {
+        showJointError("网络错误，请确认服务已启动后重试");
+      })
+      .finally(function () {
+        jointBtn.disabled = false;
+        jointBtn.textContent = "生成错缝拼板预览";
       });
   });
 

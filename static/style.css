@@ -730,6 +730,50 @@ body {
   font-size: 13px;
 }
 
+/* 错缝拼板预览 */
+.joint-select-block {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px dashed var(--line);
+}
+
+.joint-select-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: 6px 12px;
+}
+
+.joint-select-cell {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.joint-select-cell input[type="checkbox"] {
+  accent-color: var(--brand);
+  cursor: pointer;
+}
+
+.joint-bar {
+  margin: 8px 0 6px;
+}
+
+.joint-bar .joint-seg {
+  background: var(--bar-cut);
+}
+
+.joint-bar .joint-seg:nth-child(even) {
+  background: #a06c38;
+}
+
+/* 段间白缝即接缝位置 */
+.joint-bar .joint-seg + .joint-seg {
+  border-left: 2px solid #fffdf9;
+}
+
 .site-footer {
   margin-top: 26px;
   text-align: center;
