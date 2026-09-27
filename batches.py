@@ -19,6 +19,7 @@ import json
 import os
 import sqlite3
 
+from joint import plan_joint
 from optimizer import ValidationError, optimize
 from quality import expand_demands, match_measurements
 
@@ -462,3 +463,108 @@ def quality_preview(batch_id, tolerance, measurements):
         ],
         "shortages": shortages,
     }
+
+
+def joint_preview(batch_id, pieces, target_length, row_count, min_stagger):
+    """合格切件错缝拼板预览（只读，不修改批次与版本）。
+
+    校验选件（1～10 件、(板号, 切件号) 标识、无重复、板属于批次且仍合格、
+    切件序号不越界），读取冻结切件长度后调用 ``joint.plan_joint`` 精确
+    求解错缝拼板排布；无解时返回 ``feasible=False`` 与原因。
+
+    抛出
+    ----
+    ValidationError
+        参数非法、选件重复、板号不属于批次或该板非合格、切件序号越界等。
+    NotFoundError
+        批次不存在。
+    """
+    target_length = _as_positive_int(target_length, "目标行长")
+    if isinstance(row_count, bool) or not isinstance(row_count, int):
+        raise ValidationError("行数必须为整数")
+    if not 2 <= row_count <= 4:
+        raise ValidationError("行数必须为 2～4 的整数")
+    min_stagger = _as_nonneg_int(min_stagger, "最小错缝距离")
+
+    if not isinstance(pieces, list) or not 1 <= len(pieces) <= 10:
+        raise ValidationError("选件列表须包含 1～10 件切件")
+
+    normalized = []
+    seen_cuts = set()
+    for idx, row in enumerate(pieces, start=1):
+        if not isinstance(row, dict):
+            raise ValidationError(f"第 {idx} 件选件格式不正确")
+        board_no = _as_positive_int(row.get("board_no"), f"第 {idx} 件选件的板号")
+        cut_no = _as_positive_int(row.get("cut_no"), f"第 {idx} 件选件的切件序号")
+        cut_key = (board_no, cut_no)
+        if cut_key in seen_cuts:
+            raise ValidationError(f"板号 {board_no} 切件 {cut_no} 的选件重复")
+        seen_cuts.add(cut_key)
+        normalized.append({"board_no": board_no, "cut_no": cut_no})
+
+    with contextlib.closing(_connect()) as conn:
+        batch = conn.execute(
+            "SELECT id, plan_json FROM batches WHERE id = ?",
+            (batch_id,),
+        ).fetchone()
+        if batch is None:
+            raise NotFoundError(f"批次 {batch_id} 不存在")
+
+        rows = conn.execute(
+            "SELECT board_no, status FROM boards WHERE batch_id = ?",
+            (batch_id,),
+        ).fetchall()
+        status_by_no = {row["board_no"]: row["status"] for row in rows}
+
+    plan = json.loads(batch["plan_json"])
+
+    cut_count_by_no = {
+        board["board_no"]: len(board["cuts"]) for board in plan["boards"]
+    }
+    cut_length_lookup = {
+        (board["board_no"], cut_idx + 1): cut_length
+        for board in plan["boards"]
+        for cut_idx, cut_length in enumerate(board["cuts"])
+    }
+
+    for item in normalized:
+        board_no = item["board_no"]
+        if board_no not in status_by_no:
+            raise ValidationError(f"板号 {board_no} 不属于批次 {batch_id}")
+        status = status_by_no[board_no]
+        if status != STATUS_QUALIFIED:
+            label = "报废" if status == STATUS_SCRAPPED else "待加工"
+            raise ValidationError(
+                f"板号 {board_no} 当前为「{label}」，仅合格板的切件可参与拼板"
+            )
+        if item["cut_no"] > cut_count_by_no[board_no]:
+            raise ValidationError(
+                f"板号 {board_no} 只有 {cut_count_by_no[board_no]} 个切件，"
+                f"切件序号 {item['cut_no']} 越界"
+            )
+        # 切件长度取批次冻结值。
+        item["length"] = cut_length_lookup[(board_no, item["cut_no"])]
+
+    result = plan_joint(normalized, target_length, row_count, min_stagger)
+
+    response = {
+        "batch_id": batch_id,
+        "feasible": result["feasible"],
+        "target_length": target_length,
+        "row_count": row_count,
+        "min_stagger": min_stagger,
+        "selected_count": len(normalized),
+    }
+    if not result["feasible"]:
+        response["reason"] = result["reason"]
+        return response
+
+    response.update(
+        {
+            "used_count": result["used_count"],
+            "unused_count": len(normalized) - result["used_count"],
+            "rows": result["rows"],
+            "unused": result["unused"],
+        }
+    )
+    return response

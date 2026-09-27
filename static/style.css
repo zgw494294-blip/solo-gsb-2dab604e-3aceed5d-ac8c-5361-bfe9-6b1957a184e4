@@ -730,6 +730,77 @@ body {
   font-size: 13px;
 }
 
+/* 合格切件错缝拼板预览 */
+.joint-pick-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 6px;
+}
+
+.joint-pick-board {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+}
+
+.joint-pick-board-tag {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--brand);
+  min-width: 42px;
+}
+
+.joint-pick {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 13px;
+  cursor: pointer;
+  background: #f7f3ea;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 3px 10px;
+}
+
+.joint-pick input[type="checkbox"] {
+  accent-color: var(--brand);
+  cursor: pointer;
+}
+
+.joint-row-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.joint-row-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #fffdf9;
+}
+
+.joint-bar .seg-piece {
+  background: var(--bar-cut);
+  border-right: 2px solid #5f3d1c;
+}
+
+.joint-bar .seg-piece.alt {
+  background: #d9a66f;
+}
+
+.joint-bar .seg-piece:last-child {
+  border-right: none;
+}
+
+.joint-joints {
+  margin-top: 6px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
 .site-footer {
   margin-top: 26px;
   text-align: center;

@@ -213,6 +213,39 @@
             </div>
           </div>
 
+          <div id="jointSection" hidden>
+            <h3 class="section-title">合格切件错缝拼板预览</h3>
+            <p class="hint">从已核销为「合格」的原板中勾选 1～10 件切件（以板号＋切件序号标识），按等宽木条、接头无长度损耗且不裁短计算：每行从左至右拼到目标行长（行内切件长度之和恰等于目标行长），每件最多用一次，允许余件。接缝位置为除末件外的累计长度；相邻行任意两接缝位置差的绝对值须不小于最小错缝距离，无接缝行不限制邻行。精确求用件数最少的排布，并列时逐行取切件标识（先板号后切件号）字典序最小者。本预览为只读，不修改批次。</p>
+            <div class="field-grid">
+              <label class="field">
+                <span>目标行长（正整数）</span>
+                <input type="number" id="jointTarget" min="1" step="1" value="6000" inputmode="numeric" />
+              </label>
+              <label class="field">
+                <span>行数（2～4）</span>
+                <input type="number" id="jointRows" min="2" max="4" step="1" value="2" inputmode="numeric" />
+              </label>
+              <label class="field">
+                <span>最小错缝距离（非负整数）</span>
+                <input type="number" id="jointStagger" min="0" step="1" value="0" inputmode="numeric" />
+              </label>
+            </div>
+            <h4 class="subsection-title">拼板选件（勾选 1～10 件合格切件）</h4>
+            <div id="jointPickList" class="joint-pick-list"></div>
+            <button type="button" id="jointBtn" class="btn btn-primary">生成错缝拼板预览</button>
+            <div id="jointError" class="alert alert-error" role="alert" hidden></div>
+            <div id="jointWarn" class="alert alert-warn" role="alert" hidden></div>
+            <div id="jointResult" hidden>
+              <div id="jointSummary" class="summary-grid"></div>
+
+              <h4 class="subsection-title">逐行排布</h4>
+              <div id="jointRowList" class="joint-row-list"></div>
+
+              <h4 class="subsection-title">未用切件</h4>
+              <div id="jointUnused" class="qualified-list"></div>
+            </div>
+          </div>
+
           <div id="reportOk" class="alert alert-ok" role="status" hidden></div>
           <div id="reportError" class="alert alert-error" role="alert" hidden></div>
         </div>
@@ -222,7 +255,7 @@
     </main>
 
     <footer class="site-footer">
-      <span>一维排料（Bin Packing）精确求解 · 锯机作业精确排程 · Shapley 费用分摊 · 批次执行核销与实测尺寸复核（SQLite 持久化） · Flask + 原生 JavaScript</span>
+      <span>一维排料（Bin Packing）精确求解 · 锯机作业精确排程 · Shapley 费用分摊 · 批次执行核销、实测尺寸复核与合格切件错缝拼板预览（SQLite 持久化） · Flask + 原生 JavaScript</span>
     </footer>
   </div>
 

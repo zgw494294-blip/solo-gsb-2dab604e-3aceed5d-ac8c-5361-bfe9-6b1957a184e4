@@ -9,6 +9,8 @@
      POST /api/batches/{id}/reports    幂等上报逐板核销结果，原子更新并递增版本
      POST /api/batches/{id}/quality-preview
                                        实测尺寸复核（只读，不修改批次）
+     POST /api/batches/{id}/joint-preview
+                                       合格切件错缝拼板预览（只读，不修改批次）
 """
 
 import os
@@ -22,6 +24,7 @@ from batches import (
     create_batch,
     get_batch,
     init_db,
+    joint_preview,
     quality_preview,
     report_batch,
 )
@@ -237,6 +240,30 @@ def preview_batch_quality(batch_id):
         return jsonify({"error": str(exc)}), 404
 
     # 只读预览：读取冻结需求与当前板状态，不修改批次。
+    return jsonify(response)
+
+
+@app.post("/api/batches/<int:batch_id>/joint-preview")
+def preview_batch_joint(batch_id):
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({"error": "请求体必须为 JSON 对象"}), 400
+
+    try:
+        response = joint_preview(
+            batch_id=batch_id,
+            pieces=data.get("pieces"),
+            target_length=data.get("target_length"),
+            row_count=data.get("row_count"),
+            min_stagger=data.get("min_stagger"),
+        )
+    except ValidationError as exc:
+        # 参数非法、选件重复、板号不属于批次或非合格、切件越界等：400。
+        return jsonify({"error": str(exc)}), 400
+    except NotFoundError as exc:
+        return jsonify({"error": str(exc)}), 404
+
+    # 只读预览：读取冻结切件长度与当前板状态，不修改批次与版本。
     return jsonify(response)
 
 
